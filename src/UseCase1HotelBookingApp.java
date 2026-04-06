@@ -1,96 +1,91 @@
 import java.util.*;
 
-class UseCase6RoomAllocationService {
+// Class representing an optional service
+class Service {
+    String serviceName;
+    double price;
 
-    // Queue to store incoming booking requests (FIFO)
-    private Queue<BookingRequest> bookingQueue = new LinkedList<>();
-
-    // Mapping Room Types to a Set of uniquely assigned Room IDs
-    // HashMap<RoomType, Set<AllocatedRoomIDs>>
-    private Map<String, Set<String>> allocatedRooms = new HashMap<>();
-
-    // Simple inventory tracking
-    private Map<String, Integer> inventory = new HashMap<>();
-
-    public UseCase6RoomAllocationService() {
-        // Initialize inventory
-        inventory.put("DELUXE", 5);
-        inventory.put("SUITE", 2);
-
-        // Initialize the sets for each room type
-        allocatedRooms.put("DELUXE", new HashSet<>());
-        allocatedRooms.put("SUITE", new HashSet<>());
+    public Service(String serviceName, double price) {
+        this.serviceName = serviceName;
+        this.price = price;
     }
 
-    // Represents a booking request
-    static class BookingRequest {
-        String guestName;
-        String roomType;
+    @Override
+    public String toString() {
+        return serviceName + " ($" + price + ")";
+    }
+}
 
-        public BookingRequest(String guestName, String roomType) {
-            this.guestName = guestName;
-            this.roomType = roomType;
-        }
+class UseCase7AddOnServiceSelection {
+
+    // One-to-Many Relationship: Reservation ID -> List of Services
+    private Map<String, List<Service>> reservationAddOns = new HashMap<>();
+
+    /**
+     * Adds a service to a specific reservation.
+     * Demonstrates how Map and List work together for extensibility.
+     */
+    public void addServiceToReservation(String reservationId, Service service) {
+        // If the reservationId doesn't exist in the map, create a new list
+        reservationAddOns.putIfAbsent(reservationId, new ArrayList<>());
+
+        // Add the service to the list associated with this reservation
+        reservationAddOns.get(reservationId).add(service);
+
+        System.out.println("Service Added: " + service.serviceName + " to Reservation " + reservationId);
     }
 
-    public void addRequest(String name, String type) {
-        bookingQueue.add(new BookingRequest(name, type));
-    }
+    /**
+     * Calculates the total cost of all add-ons for a specific reservation.
+     */
+    public double calculateTotalAddOnCost(String reservationId) {
+        double total = 0.0;
+        List<Service> services = reservationAddOns.get(reservationId);
 
-    public void processAllocations() {
-        System.out.println("--- Starting Room Allocation Process ---");
-
-        while (!bookingQueue.isEmpty()) {
-            BookingRequest request = bookingQueue.poll();
-            String type = request.roomType;
-
-            // 1. Check Availability
-            if (inventory.containsKey(type) && inventory.get(type) > 0) {
-
-                // 2. Generate Unique Room ID
-                // In a real system, this would pull from a list of physical rooms.
-                // Here, we generate one based on current count + 100
-                int roomNumber = 100 + (allocatedRooms.get(type).size() + 1);
-                String generatedRoomId = type + "-" + roomNumber;
-
-                // 3. Prevent Double-Booking (Set Uniqueness Enforcement)
-                if (!allocatedRooms.get(type).contains(generatedRoomId)) {
-
-                    // 4. Atomic Logical Operation: Add to Set and Decrement Inventory
-                    allocatedRooms.get(type).add(generatedRoomId);
-                    inventory.put(type, inventory.get(type) - 1);
-
-                    System.out.println("CONFIRMED: " + request.guestName +
-                            " assigned to " + generatedRoomId);
-                } else {
-                    System.out.println("ERROR: Room ID Collision detected for " + generatedRoomId);
-                }
-            } else {
-                System.out.println("REJECTED: No availability for " + request.guestName + " (" + type + ")");
+        if (services != null) {
+            for (Service s : services) {
+                total += s.price;
             }
         }
-        System.out.println("--- Allocation Process Complete ---\n");
+        return total;
     }
 
-    public void displayFinalState() {
-        System.out.println("Final Inventory State: " + inventory);
-        System.out.println("Allocated Rooms: " + allocatedRooms);
+    /**
+     * Displays the summary of services for a guest.
+     */
+    public void displayReservationSummary(String reservationId) {
+        System.out.println("\n--- Summary for Reservation: " + reservationId + " ---");
+        List<Service> services = reservationAddOns.getOrDefault(reservationId, new ArrayList<>());
+
+        if (services.isEmpty()) {
+            System.out.println("No add-on services selected.");
+        } else {
+            System.out.println("Selected Services: " + services);
+            System.out.println("Total Add-On Cost: $" + calculateTotalAddOnCost(reservationId));
+        }
     }
 
     public static void main(String[] args) {
-        UseCase6RoomAllocationService service = new UseCase6RoomAllocationService();
+        UseCase7AddOnServiceSelection manager = new UseCase7AddOnServiceSelection();
 
-        // Adding requests to the queue
-        service.addRequest("Alice", "DELUXE");
-        service.addRequest("Bob", "DELUXE");
-        service.addRequest("Charlie", "SUITE");
-        service.addRequest("David", "SUITE");
-        service.addRequest("Eve", "SUITE"); // Should be rejected (only 2 suites available)
+        // Define available services
+        Service breakfast = new Service("Buffet Breakfast", 25.0);
+        Service wifi = new Service("High-Speed WiFi", 10.0);
+        Service spa = new Service("Spa Treatment", 120.0);
+        Service laundry = new Service("Express Laundry", 30.0);
 
-        // Process the queue
-        service.processAllocations();
+        // Scenario: Guest Alice (RES-101) wants breakfast and WiFi
+        manager.addServiceToReservation("RES-101", breakfast);
+        manager.addServiceToReservation("RES-101", wifi);
 
-        // Show results
-        service.displayFinalState();
+        // Scenario: Guest Bob (RES-102) wants a premium experience
+        manager.addServiceToReservation("RES-102", breakfast);
+        manager.addServiceToReservation("RES-102", spa);
+        manager.addServiceToReservation("RES-102", laundry);
+
+        // Output Results
+        manager.displayReservationSummary("RES-101");
+        manager.displayReservationSummary("RES-102");
+        manager.displayReservationSummary("RES-103"); // Test empty case
     }
 }
