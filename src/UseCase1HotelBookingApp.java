@@ -1,88 +1,72 @@
 import java.util.*;
 
-// Represents a finalized reservation record for historical tracking
-class Reservation {
-    String reservationId;
-    String guestName;
-    String roomType;
-    String roomId;
-    double totalCost;
+class UseCase10BookingCancellation {
 
-    public Reservation(String reservationId, String guestName, String roomType, String roomId, double totalCost) {
-        this.reservationId = reservationId;
-        this.guestName = guestName;
-        this.roomType = roomType;
-        this.roomId = roomId;
-        this.totalCost = totalCost;
-    }
+    // Current Active Bookings: ReservationID -> RoomID
+    private Map<String, String> activeBookings = new HashMap<>();
 
-    @Override
-    public String toString() {
-        return String.format("| %-8s | %-10s | %-8s | %-10s | $%-8.2f |",
-                reservationId, guestName, roomType, roomId, totalCost);
-    }
-}
+    // Inventory: RoomType -> Count
+    private Map<String, Integer> inventory = new HashMap<>();
 
-class UseCase8BookingHistoryReport {
+    // Rollback Structure: Stack to track released Room IDs (LIFO)
+    private Stack<String> releasedRoomsStack = new Stack<>();
 
-    // The historical data store - maintains chronological order of confirmations
-    private List<Reservation> bookingHistory = new ArrayList<>();
-
-    /**
-     * Adds a confirmed booking to the history log.
-     * This simulates persistence.
-     */
-    public void recordBooking(Reservation res) {
-        bookingHistory.add(res);
+    public UseCase10BookingCancellation() {
+        // Initial State
+        inventory.put("DELUXE", 0); // All booked
+        activeBookings.put("RES-101", "DELUXE-101");
+        activeBookings.put("RES-102", "DELUXE-102");
     }
 
     /**
-     * Generates a detailed audit report of all transactions.
+     * Performs a controlled rollback of a booking.
      */
-    public void generateFullReport() {
-        System.out.println("\n--- OFFICIAL BOOKING HISTORY REPORT ---");
-        System.out.println("------------------------------------------------------------");
-        System.out.println("| Res ID   | Guest      | Type     | Room ID    | Cost      |");
-        System.out.println("------------------------------------------------------------");
+    public void cancelBooking(String reservationId, String roomType) {
+        System.out.println("Attempting cancellation for: " + reservationId);
 
-        for (Reservation res : bookingHistory) {
-            System.out.println(res);
+        // 1. Validation: Ensure the reservation exists
+        if (!activeBookings.containsKey(reservationId)) {
+            System.out.println("ERROR: Cancellation Failed. Reservation " + reservationId + " not found.");
+            return;
         }
 
-        System.out.println("------------------------------------------------------------");
+        // 2. Identify the Room to be released
+        String roomId = activeBookings.remove(reservationId);
+
+        // 3. State Reversal: Push Room ID to Stack (LIFO Rollback)
+        releasedRoomsStack.push(roomId);
+
+        // 4. Inventory Restoration: Increment count immediately
+        inventory.put(roomType, inventory.get(roomType) + 1);
+
+        System.out.println("SUCCESS: " + reservationId + " cancelled. Room " + roomId + " returned to pool.");
     }
 
-    /**
-     * Generates a high-level summary report (Revenue and Volume).
-     */
-    public void generateSummaryReport() {
-        double totalRevenue = 0;
-        Map<String, Integer> roomTypeCount = new HashMap<>();
-
-        for (Reservation res : bookingHistory) {
-            totalRevenue += res.totalCost;
-            roomTypeCount.put(res.roomType, roomTypeCount.getOrDefault(res.roomType, 0) + 1);
-        }
-
-        System.out.println("\n--- EXECUTIVE SUMMARY ---");
-        System.out.println("Total Bookings Processed: " + bookingHistory.size());
-        System.out.println("Total Revenue Generated:  $" + totalRevenue);
-        System.out.println("Bookings by Category:    " + roomTypeCount);
-        System.out.println("--------------------------\n");
+    public void displaySystemState() {
+        System.out.println("\n--- Current System State ---");
+        System.out.println("Active Bookings: " + activeBookings);
+        System.out.println("Inventory:       " + inventory);
+        System.out.println("Released Stack:  " + releasedRoomsStack);
+        System.out.println("----------------------------\n");
     }
 
     public static void main(String[] args) {
-        UseCase8BookingHistoryReport reportService = new UseCase8BookingHistoryReport();
+        UseCase10BookingCancellation service = new UseCase10BookingCancellation();
 
-        // Simulating the transition from Use Case 6/7 to History
-        // In a real app, these would be passed from the Allocation Service
-        reportService.recordBooking(new Reservation("RSV001", "Alice", "DELUXE", "DELUXE-101", 185.0));
-        reportService.recordBooking(new Reservation("RSV002", "Bob", "SUITE", "SUITE-201", 450.0));
-        reportService.recordBooking(new Reservation("RSV003", "Charlie", "DELUXE", "DELUXE-102", 150.0));
-        reportService.recordBooking(new Reservation("RSV004", "David", "SUITE", "SUITE-202", 520.0));
+        service.displaySystemState();
 
-        // Admin requests reports
-        reportService.generateFullReport();
-        reportService.generateSummaryReport();
+        // Guest initiates cancellation
+        service.cancelBooking("RES-102", "DELUXE");
+        service.cancelBooking("RES-101", "DELUXE");
+
+        // Attempting to cancel a non-existent booking (Validation check)
+        service.cancelBooking("RES-999", "DELUXE");
+
+        service.displaySystemState();
+
+        // Demonstrating LIFO: The last room cancelled (101) is at the top of the stack
+        if (!service.releasedRoomsStack.isEmpty()) {
+            System.out.println("Next room available for priority re-assignment: " + service.releasedRoomsStack.peek());
+        }
     }
 }
