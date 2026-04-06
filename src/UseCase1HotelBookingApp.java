@@ -1,72 +1,65 @@
 import java.util.*;
 
-class UseCase10BookingCancellation {
+class UseCase11ConcurrentBookingSimulation {
 
-    // Current Active Bookings: ReservationID -> RoomID
-    private Map<String, String> activeBookings = new HashMap<>();
-
-    // Inventory: RoomType -> Count
-    private Map<String, Integer> inventory = new HashMap<>();
-
-    // Rollback Structure: Stack to track released Room IDs (LIFO)
-    private Stack<String> releasedRoomsStack = new Stack<>();
-
-    public UseCase10BookingCancellation() {
-        // Initial State
-        inventory.put("DELUXE", 0); // All booked
-        activeBookings.put("RES-101", "DELUXE-101");
-        activeBookings.put("RES-102", "DELUXE-102");
-    }
+    // Shared Resources
+    private int inventory = 3; // Only 3 rooms available
+    private final List<String> confirmedBookings = new ArrayList<>();
+    private final Object lock = new Object(); // Explicit lock object for synchronization
 
     /**
-     * Performs a controlled rollback of a booking.
+     * Attempts to book a room.
+     * The 'synchronized' block ensures this is a Critical Section.
      */
-    public void cancelBooking(String reservationId, String roomType) {
-        System.out.println("Attempting cancellation for: " + reservationId);
+    public void bookRoom(String guestName) {
+        System.out.println(guestName + " is attempting to book...");
 
-        // 1. Validation: Ensure the reservation exists
-        if (!activeBookings.containsKey(reservationId)) {
-            System.out.println("ERROR: Cancellation Failed. Reservation " + reservationId + " not found.");
-            return;
+        // Synchronize on the lock object to prevent Race Conditions
+        synchronized (lock) {
+            if (inventory > 0) {
+                // Simulate some processing time to increase the chance of a race condition
+                try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
+
+                inventory--;
+                confirmedBookings.add(guestName);
+                System.out.println("SUCCESS: Room allocated to " + guestName + ". Remaining: " + inventory);
+            } else {
+                System.out.println("FAILED: No rooms left for " + guestName);
+            }
         }
-
-        // 2. Identify the Room to be released
-        String roomId = activeBookings.remove(reservationId);
-
-        // 3. State Reversal: Push Room ID to Stack (LIFO Rollback)
-        releasedRoomsStack.push(roomId);
-
-        // 4. Inventory Restoration: Increment count immediately
-        inventory.put(roomType, inventory.get(roomType) + 1);
-
-        System.out.println("SUCCESS: " + reservationId + " cancelled. Room " + roomId + " returned to pool.");
     }
 
-    public void displaySystemState() {
-        System.out.println("\n--- Current System State ---");
-        System.out.println("Active Bookings: " + activeBookings);
-        System.out.println("Inventory:       " + inventory);
-        System.out.println("Released Stack:  " + releasedRoomsStack);
-        System.out.println("----------------------------\n");
+    public void displayResults() {
+        System.out.println("\n--- Final Simulation Results ---");
+        System.out.println("Total Inventory Remaining: " + inventory);
+        System.out.println("Confirmed Guests: " + confirmedBookings);
+        System.out.println("Total Bookings: " + confirmedBookings.size());
     }
 
     public static void main(String[] args) {
-        UseCase10BookingCancellation service = new UseCase10BookingCancellation();
+        UseCase11ConcurrentBookingSimulation simulation = new UseCase11ConcurrentBookingSimulation();
 
-        service.displaySystemState();
+        // Create a pool of threads representing concurrent guests
+        Thread t1 = new Thread(() -> simulation.bookRoom("Guest-Alice"));
+        Thread t2 = new Thread(() -> simulation.bookRoom("Guest-Bob"));
+        Thread t3 = new Thread(() -> simulation.bookRoom("Guest-Charlie"));
+        Thread t4 = new Thread(() -> simulation.bookRoom("Guest-David"));
+        Thread t5 = new Thread(() -> simulation.bookRoom("Guest-Eve"));
 
-        // Guest initiates cancellation
-        service.cancelBooking("RES-102", "DELUXE");
-        service.cancelBooking("RES-101", "DELUXE");
+        // Start all threads simultaneously
+        t1.start();
+        t2.start();
+        t3.start();
+        t4.start();
+        t5.start();
 
-        // Attempting to cancel a non-existent booking (Validation check)
-        service.cancelBooking("RES-999", "DELUXE");
-
-        service.displaySystemState();
-
-        // Demonstrating LIFO: The last room cancelled (101) is at the top of the stack
-        if (!service.releasedRoomsStack.isEmpty()) {
-            System.out.println("Next room available for priority re-assignment: " + service.releasedRoomsStack.peek());
+        // Wait for all threads to finish (Join)
+        try {
+            t1.join(); t2.join(); t3.join(); t4.join(); t5.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
+
+        simulation.displayResults();
     }
 }
